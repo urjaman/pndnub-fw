@@ -75,7 +75,7 @@ boot:
 	ldi acki2c, 0xC4 /* TWEN + TWEA (+ useless INT clear), we're live. */
 	out _SFR_IO_ADDR(TWCR), acki2c
 
-	ldi r17, 0 // FIXME: 2 seconds...
+	ldi r17, _BV(WDE) | _BV(WDP2) | _BV(WDP1) | _BV(WDP0)
 	rcall wdt_cfg
 
 	sbrc bootflags, WDRF
@@ -122,14 +122,14 @@ bootlp:
 	ldi r16, 0x03 // erase
 	rcall spm_op
 	ldi r16, 0x01
-pageload:
+0:
 	ld r0, Y+
 	ld r1, Y+
 	out _SFR_IO_ADDR(SPMCR), r16
 	spm
 	adiw Zlo, 2
 	dec dlen
-	brne pageload
+	brne 0b
 	movw Zlo, adl // Restore Z from 25:24
 	ldi r16, 0x05
 	rcall spm_op
