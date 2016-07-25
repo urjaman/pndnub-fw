@@ -20,7 +20,7 @@
 
 PROJECT=pndnub-fw
 DEPS=main.h i2c.h i2chandler.h Makefile lib.h
-SOURCES=main.c i2c.c i2chandler.c lib.c
+SOURCES=main.c i2c.c i2chandler.c lib.c nubber.c
 CC=avr-gcc
 LD=avr-ld
 OBJCOPY=avr-objcopy
@@ -64,6 +64,10 @@ clean:
 	rm -f *.o
 	rm -f boot.out boot.hex
 	rm -f serialprogrammer
+
+brpgm: $(PROJECT).hex
+	avrdude -c arduino -b 115200 -p m8 -P /dev/ttyUSB2 -U flash:w:$(PROJECT).hex
+
 
 blpgm: boot.hex
 	avrdude -p m8 -c avrispmkII -P usb -U flash:w:boot.hex

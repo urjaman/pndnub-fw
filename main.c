@@ -22,42 +22,30 @@
 #include "i2c.h"
 #include "i2chandler.h"
 #include "lib.h"
+#include "nubber.h"
 
 #define DP(x) i2ch_dprint_P(PSTR(x))
 #define DPS(x) i2ch_dprint(x)
 
-void dp_hb(uint8_t byte) {
+static void dp_hb(uint8_t byte) {
     uint8_t buf[3];
     uchar2xstr(buf,byte);
     DPS((char*)buf);
-}
-
-void jump_bootloader(void) __attribute__((noreturn));
-void jump_bootloader(void)
-{
-    /* Take over from i2ch_run here. */
-    uint8_t txbuf[1];
-    txbuf[0] = 0x55;
-    i2c_set_txbuf(txbuf,1);
-    while (!i2c_getclear_txlen()) {
-        /* ... wait for a read ... we no sleep yet... */
-    }
-    /* jump to boooot loader */
-	void (*const btloader)(void) __attribute__((noreturn)) = (void*)(BTLOADERADDR>>1); // Make PM
-	cli();
-	btloader();
 }
 
 void main(void) __attribute__((noreturn,OS_main));
 void main(void) {
 	i2c_init();
 	i2ch_init();
+	nub_init();
+	if (!(PIND & _BV(6))) PORTD &= ~_BV(6); // turn off the pullup on the address determination if its grounded.
 	sei();
-	DP("Boot!\n");
+	DP("Boot!\r\n");
 	uint8_t len = 0;
 	for(;;) {
 	    uint8_t *cmd = i2c_get_command(&len);
 	    i2ch_run();
+		nub_run();
 	    if (cmd) {
 	        DP("Cmd: l=");
 	        dp_hb(len);
@@ -66,13 +54,7 @@ void main(void) {
 	            dp_hb(cmd[i]);
 	            DP(" ");
 	        }
-	        DP("\n");
-	        if (len>=1) {
-	            switch (cmd[0]) {
-	                case 0xAA:
-	                    jump_bootloader();
-	            }
-	        }
+	        DP("\r\n");
 	    }
 	    /* no sleep, yet .. debug fw. */
 	}
