@@ -23,25 +23,11 @@
 #include "i2chandler.h"
 #include "lib.h"
 #include "nubber.h"
+#include "nubcal.h"
 
 #define DP(x) i2ch_dprint_P(PSTR(x))
 #define DPS(x) i2ch_dprint(x)
 
-static void dp_hb(uint8_t byte) {
-    uint8_t buf[3];
-    uchar2xstr(buf,byte);
-    DPS((char*)buf);
-}
-
-static void dp_uint(uint8_t c, uint16_t w) {
-	uint8_t buf[10];
-	buf[0] = c;
-	uchar2xstr(buf+1, w>>8);
-	uchar2xstr(buf+3, w&0xFF);
-	buf[5] = ' ';
-	buf[6] = 0;
-	DPS((char*)buf);
-}
 
 #define NUB_E _BV(0)
 #define NUB_W _BV(1)
@@ -120,7 +106,7 @@ void nub_run(void) {
 			sei();
 			int ew = (adc_res[0]>>2) - (adc_res[1]>>2);
 			int ns = (adc_res[2]>>2) - (adc_res[3]>>2);
-			signed char result[4] = {};
+			signed char result[2] = {};
 				
 			result[0] = ew / 16;
 			result[1] = ns / 16;
@@ -142,9 +128,7 @@ void nub_run(void) {
 				GICR |= _BV(INT0);
 				sleepy_mode(1);
 			} else {
-				dp_uint('X', ew);
-				dp_uint('Y', ns);
-				i2ch_set_result(result, 0);
+				nubcal_input(ew, ns);
 				DDRD |= _BV(7); // IRQ on (is on for the entire sequence AFAIK)
 			}
 		} else {

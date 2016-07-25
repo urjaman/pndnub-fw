@@ -20,7 +20,7 @@
 
 PROJECT=pndnub-fw
 DEPS=main.h i2c.h i2chandler.h Makefile lib.h
-SOURCES=main.c i2c.c i2chandler.c lib.c nubber.c
+SOURCES=main.c i2c.c i2chandler.c lib.c nubber.c nubcal.c
 CC=avr-gcc
 LD=avr-ld
 OBJCOPY=avr-objcopy
