@@ -28,7 +28,7 @@ MMCU=atmega8
 BTLOADERADDR=0x1F00
 SERIAL_DEV=/dev/ttyUSB0
 
-AVRBINDIR=/usr/avr/bin/
+#AVRBINDIR=/usr/avr/bin/
 #AVRDUDECMD=avrdude -p m644p -c dt006 -E noreset
 # If using avr-gcc < 4.6.0, replace -flto with -combine
 CFLAGS=-mmcu=$(MMCU) -Os -Wl,--relax -fno-inline-small-functions -frename-registers -g -Wall -W -pipe -flto -fwhole-program -std=gnu99 -Wno-main
@@ -64,8 +64,9 @@ clean:
 	rm -f *.o
 	rm -f boot.out boot.hex
 	rm -f serialprogrammer
-	
 
+blpgm: boot.hex
+	avrdude -p m8 -c avrispmkII -P usb -U flash:w:boot.hex
 
 bootloader: boot.hex
 
