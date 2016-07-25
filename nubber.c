@@ -54,25 +54,10 @@ static void dp_uint(uint8_t c, uint16_t w) {
 
 static void adc_init(void) {
 	ADMUX = _BV(REFS0);
-	ADCSRA = _BV(ADEN) | _BV(ADSC) | _BV(ADFR) | _BV(ADPS2) | _BV(ADPS1) | _BV(ADPS0);
+	ADCSRA = 0;
 }
 
-static uint16_t adc_read(void) {
-	while (!(ADCSRA & _BV(ADIF)));
-	uint16_t d = ADC;
-	ADCSRA = ADCSRA;
-	return d;
-}
-
-static volatile uint8_t once = 1;
-
-ISR(INT0_vect) {
-	DP("IRQ!");
-	GICR &= ~_BV(INT0);
-	once = 0;
-}
-
-static void set_pattern(uint8_t p) {
+inline static void set_pattern(uint8_t p) {
 	switch (p) {
 		default: PORTB = NUB_E | NUB_W | NUB_C | NUB_N | NUB_S | UNUSED; break;
 		case 1: PORTB = NUB_E | UNUSED;	break;
@@ -83,12 +68,41 @@ static void set_pattern(uint8_t p) {
 	}
 }
 
-static int read_pattern(uint8_t p) {
-	set_pattern(p);
-	_delay_ms(3);
-	adc_read();
-	return adc_read();
+ISR(INT0_vect) {
+	DP("IRQ!");
+	GICR &= ~_BV(INT0);
+	ADCSRA = _BV(ADEN) | _BV(ADSC) | _BV(ADFR) | _BV(ADPS2) | _BV(ADPS1) | _BV(ADPS0) | _BV(ADIF) | _BV(ADIE);
+	set_pattern(1);
 }
+
+static uint8_t adc_state = 0;
+static uint16_t adc_sum = 0;
+#define SKIP_SAMPLES 6
+#define SAMPLE_CNT 16
+
+static volatile uint16_t adc_res[4];
+static volatile uint8_t output = 0;
+
+ISR(ADC_vect) {
+	adc_state++;
+	uint8_t scnt = adc_state&0x1F;
+	if (scnt <= SKIP_SAMPLES)
+		return;
+	uint16_t s = ADC;
+	adc_sum += s;
+	if (scnt >= SKIP_SAMPLES+SAMPLE_CNT) {
+		uint8_t chan = adc_state >> 5;
+		adc_res[chan++] = adc_sum;
+		adc_sum = 0;
+		if (chan>=4) {
+			chan = 0;
+			output = 1;
+		}
+		adc_state = chan << 5;
+		set_pattern(chan+1);
+	}
+}
+
 
 void nub_init(void) {
 	DDRB = NUB_E | NUB_W | NUB_C | NUB_N | NUB_S;
@@ -96,27 +110,48 @@ void nub_init(void) {
 	adc_init();
 }
 
+static uint8_t stop_counter = 0;
+
 void nub_run(void) {
+	cli();
 	if (!(GICR & _BV(INT0))) {
-		if (PIND & _BV(2)) {
-			GICR |= _BV(INT0);
-			once = 0;
+		if (output) {
+			output = 0;
+			sei();
+			int ew = (adc_res[0]>>2) - (adc_res[1]>>2);
+			int ns = (adc_res[2]>>2) - (adc_res[3]>>2);
+			signed char result[4] = {};
+				
+			result[0] = ew / 16;
+			result[1] = ns / 16;
+
+			if ((!result[0])&&(!result[1])) {
+				stop_counter++;
+			} else {
+				stop_counter = 0;
+			}
+
+			if (stop_counter >= 40) {
+				cli();
+				DDRD &= ~_BV(7); // IRQ off
+				stop_counter = 0;
+				set_pattern(0);
+				adc_state = 0;
+				adc_sum = 0;
+				ADCSRA = 0;
+				GICR |= _BV(INT0);
+				sleepy_mode(1);
+			} else {
+				dp_uint('X', ew);
+				dp_uint('Y', ns);
+				i2ch_set_result(result, 0);
+				DDRD |= _BV(7); // IRQ on (is on for the entire sequence AFAIK)
+			}
+		} else {
+			sleepy_mode(0); // does sei()
 		}
-	}
-	if (!once) {
-		signed char output[4] = {};
-		dp_uint('A', adc_read());
-		int ew = read_pattern(1) - read_pattern(2);
-		int ns = read_pattern(3) - read_pattern(4);
-		set_pattern(0);
-		dp_uint('X', ew);
-		dp_uint('Y', ns);
-		output[0] = ew / 4;
-		output[1] = ns / 4;
-		i2ch_set_result(output, 0);
 	} else {
-		_delay_ms(1);
+		sleepy_mode(1); // does sei();
 	}
-	once++;
 }
 	

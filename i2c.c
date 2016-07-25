@@ -33,6 +33,7 @@ void i2c_init(void)
     TWCR = _BV(TWEA) | _BV(TWEN) | _BV(TWIE);
 }
 
+static volatile uint8_t i2c_busy = 0;
 
 ISR(TWI_vect)
 {
@@ -42,6 +43,7 @@ ISR(TWI_vect)
     switch (twst) {
         default: /* Default handling of unknown/unhandled states is to just forget about it. */
             TWCR = _BV(TWINT) | _BV(TWEA) | _BV(TWEN) | _BV(TWSTO) | _BV(TWIE);
+			i2c_busy = 0;
             break;
         case TW_ST_SLA_ACK:
         case TW_ST_ARB_LOST_SLA_ACK:
@@ -52,9 +54,7 @@ ISR(TWI_vect)
             }
             TWCR = _BV(TWINT) | _BV(TWEA) | _BV(TWEN) | _BV(TWIE);
             i2c_tx_outoff = 1;
-            /* IRQ early off when somebody is reading from us. */
-            /* This is app specific, but cut-outable easy enough. */
-            DDRD &= ~_BV(7);
+			i2c_busy = 1;
             break;
 
         case TW_ST_DATA_ACK:
@@ -72,11 +72,13 @@ ISR(TWI_vect)
             if (i2c_tx_maxout < i2c_tx_outoff)
                     i2c_tx_maxout = i2c_tx_outoff;
             i2c_tx_outoff = 0;
+			i2c_busy = 0;
             break;
 
         case TW_SR_SLA_ACK:
         case TW_SR_ARB_LOST_SLA_ACK:
             TWCR = _BV(TWINT) | _BV(TWEA) | _BV(TWEN) | _BV(TWIE);
+			i2c_busy = 1;
             i2c_rx_bufoff = 0;
             break;
 
@@ -90,10 +92,11 @@ ISR(TWI_vect)
             TWCR = _BV(TWINT) | _BV(TWEA) | _BV(TWEN) | _BV(TWIE);
             i2c_rx_len[i2c_rx_bpw] = i2c_rx_bufoff;
             i2c_rx_bpw ^= 1;
+			i2c_busy = 0;
             break;
     }
 }
-
+ 
 
 uint8_t i2c_set_txbuf(uint8_t *buf, uint8_t len)
 {
@@ -131,3 +134,13 @@ uint8_t *i2c_get_command(uint8_t *len) {
     return NULL;
 }
 
+
+void sleepy_mode(uint8_t deepok) {
+	cli();
+	if (i2c_busy) deepok = 0;
+	set_sleep_mode(deepok?SLEEP_MODE_PWR_DOWN:SLEEP_MODE_IDLE);
+	sleep_enable();
+	sei();
+	sleep_cpu();
+	sleep_disable();
+}
